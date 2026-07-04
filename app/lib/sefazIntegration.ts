@@ -68,20 +68,14 @@ async function getGoogleAccessTokenCached(): Promise<string> {
 
 async function getGoogleAccessToken(): Promise<string> {
   const { createSign } = await import("crypto");
-  const { readFile } = await import("fs/promises");
-  const path = await import("path");
 
-  const configuredPath = process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE;
-  if (!configuredPath) {
-    throw new Error("GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE nao configurado");
+  const base64Credentials = process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_B64;
+  if (!base64Credentials) {
+    throw new Error("GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_B64 nao configurado");
   }
 
-  const filePath = path.isAbsolute(configuredPath)
-    ? configuredPath
-    : path.join(process.cwd(), ".secrets", path.basename(configuredPath));
-
-  const raw = await readFile(filePath, "utf8");
-  const serviceAccount = JSON.parse(raw);
+  const decodedJson = Buffer.from(base64Credentials, "base64").toString("utf-8");
+  const serviceAccount = JSON.parse(decodedJson);
 
   const now = Math.floor(Date.now() / 1000);
   const header = { alg: "RS256", typ: "JWT" };
