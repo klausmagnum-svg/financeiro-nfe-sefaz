@@ -1,6 +1,4 @@
 import { createSign } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 
 type ServiceAccount = {
   client_email: string;
@@ -27,16 +25,13 @@ function base64Url(input: string | Buffer) {
 }
 
 async function loadServiceAccount() {
-  const configuredPath = process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE;
-  if (!configuredPath) {
-    throw new Error("GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE nao configurado.");
+  const base64Credentials = process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_B64;
+  if (!base64Credentials) {
+    throw new Error("GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_B64 nao configurado.");
   }
 
-  const filePath = path.isAbsolute(configuredPath)
-    ? configuredPath
-    : path.join(process.cwd(), ".secrets", path.basename(configuredPath));
-  const raw = await readFile(filePath, "utf8");
-  return JSON.parse(raw) as ServiceAccount;
+  const decodedJson = Buffer.from(base64Credentials, "base64").toString("utf-8");
+  return JSON.parse(decodedJson) as ServiceAccount;
 }
 
 async function getAccessToken() {
