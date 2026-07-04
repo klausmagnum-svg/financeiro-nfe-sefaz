@@ -4,6 +4,8 @@ import { useState } from "react";
 import FiscalModulePage from "../FiscalModulePage";
 import SyncNFeModal from "@/app/components/SyncNFeModal";
 
+export const dynamic = 'force-dynamic';
+
 export default function NfePage() {
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
 

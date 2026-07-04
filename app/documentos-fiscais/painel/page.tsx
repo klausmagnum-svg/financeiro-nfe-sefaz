@@ -1,5 +1,7 @@
 import FiscalModulePage from "../FiscalModulePage";
 
+export const dynamic = 'force-dynamic';
+
 export default function PainelFiscalPage() {
   return (
     <FiscalModulePage
