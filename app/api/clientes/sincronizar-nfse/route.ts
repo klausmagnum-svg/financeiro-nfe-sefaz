@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { createClientDocumentFolderStructure } from "@/app/lib/googleDriveServer";
+import { createClientDocumentFolderStructure, uploadNFSeXmlToDrive } from "@/app/lib/googleDriveServer";
+import { loginAndDownloadNFSes, extractNFSeDataFromXml } from "@/app/lib/nfsePortalIntegration";
+import { decryptSecret } from "@/app/lib/certificateCrypto";
+import { downloadCertificateFromDrive, cleanupTempFile } from "@/app/lib/sefazIntegration";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -119,35 +122,138 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Erro ao criar registro de sincronizacao" }, { status: 500 });
     }
 
-    const folderStructure = await createClientDocumentFolderStructure(
-      cliente.razao_social,
-      cliente.identificacao
-    );
+    // Baixar certificado do Google Drive
+    let certificadoPath: string | null = null;
+    let quantidadeEncontrada = 0;
+    let quantidadeImportada = 0;
+    let quantidadeErro = 0;
+    let mensagemSincronizacao = "";
 
-    if (!folderStructure.success) {
-      throw new Error(`Erro ao criar pastas: ${folderStructure.error}`);
+    try {
+      if (!certificado.drive_file_id) {
+        throw new Error("Certificado nao possui arquivo associado");
+      }
+
+      if (!certificado.senha_criptografada) {
+        throw new Error("Certificado nao possui senha cadastrada");
+      }
+
+      // Download certificado do Google Drive
+      certificadoPath = await downloadCertificateFromDrive(certificado.drive_file_id);
+
+      // Descriptografar senha
+      const senhaCertificado = decryptSecret(certificado.senha_criptografada);
+
+      // Sincronizar NFSes Emitidas
+      const { nfses: nfsesEmitidas, error: erroEmitidas } = await loginAndDownloadNFSes(
+        certificadoPath,
+        senhaCertificado,
+        cliente.identificacao,
+        "Emitidas"
+      );
+
+      if (erroEmitidas) {
+        console.warn("Erro ao baixar NFSes emitidas:", erroEmitidas);
+      }
+
+      // Sincronizar NFSes Recebidas
+      const { nfses: nfsesRecebidas, error: erroRecebidas } = await loginAndDownloadNFSes(
+        certificadoPath,
+        senhaCertificado,
+        cliente.identificacao,
+        "Recebidas"
+      );
+
+      if (erroRecebidas) {
+        console.warn("Erro ao baixar NFSes recebidas:", erroRecebidas);
+      }
+
+      const todasNFSes = [...nfsesEmitidas, ...nfsesRecebidas];
+      quantidadeEncontrada = todasNFSes.length;
+
+      if (quantidadeEncontrada === 0) {
+        mensagemSincronizacao = "Nenhuma NFSe encontrada no portal nacional.";
+      } else {
+        // Processar cada NFSe
+        for (const nfse of todasNFSes) {
+          try {
+            const origem = nfsesEmitidas.includes(nfse) ? "Emitidas" : "Recebidas";
+            const fileName = `${nfse.numero || "nota"}.xml`;
+
+            // Upload para Google Drive
+            await uploadNFSeXmlToDrive(
+              nfse.xml,
+              fileName,
+              cliente.razao_social,
+              cliente.identificacao,
+              origem,
+              nfse.mes
+            );
+
+            // Extrair dados e salvar no Supabase
+            const nfseData = await extractNFSeDataFromXml(nfse.xml);
+
+            if (nfseData) {
+              const xmlPath = `NFSe/${cliente.razao_social}/${origem}/${nfse.mes}/${fileName}`;
+
+              await adminClient
+                .from("documentos_fiscais")
+                .insert({
+                  cliente_id: clienteId,
+                  tipo_documento: "NFSe",
+                  numero: nfseData.numero || nfse.numero,
+                  serie: nfseData.serie || nfse.serie,
+                  chave_acesso: nfseData.chave_acesso || nfse.chave_acesso,
+                  data_emissao: nfseData.data_emissao || nfse.data_emissao,
+                  valor_total: parseFloat(nfseData.valor || nfse.valor || "0"),
+                  origem: origem as "Recebidas" | "Emitidas",
+                  status: "Importada",
+                  xml_storage_path: xmlPath,
+                  sincronizacao_id: sincSync.id,
+                });
+
+              quantidadeImportada++;
+            }
+          } catch (nfseError) {
+            quantidadeErro++;
+            console.error(`Erro ao processar NFSe ${nfse.numero}:`, nfseError);
+          }
+        }
+
+        mensagemSincronizacao = `Sincronizacao concluída: ${quantidadeImportada} notas importadas, ${quantidadeErro} com erro.`;
+      }
+
+      if (certificadoPath) {
+        await cleanupTempFile(certificadoPath);
+      }
+    } catch (syncError) {
+      const errorMsg = syncError instanceof Error ? syncError.message : "Erro desconhecido";
+      mensagemSincronizacao = `Erro na sincronização: ${errorMsg}`;
+      quantidadeErro = quantidadeEncontrada;
     }
 
     // Atualizar registro de sincronização
     await adminClient
       .from("documentos_fiscais_sincronizacoes")
       .update({
-        status: "Pendente",
-        pasta_criada: true,
-        quantidade_encontrada: 0,
-        quantidade_importada: 0,
-        quantidade_erro: 0,
-        mensagem: "Pasta criada com sucesso. Sincronização pendente.",
+        status: quantidadeErro === 0 && quantidadeImportada > 0 ? "Concluída" : "Com erro",
+        data_fim: new Date().toISOString(),
+        quantidade_encontrada: quantidadeEncontrada,
+        quantidade_importada: quantidadeImportada,
+        quantidade_erro: quantidadeErro,
+        mensagem: mensagemSincronizacao,
       })
       .eq("id", sincSync.id);
 
     return NextResponse.json({
-      sucesso: true,
-      mensagem: "Estrutura de pastas criada com sucesso no Google Drive. Integração com Sefaz em desenvolvimento.",
+      sucesso: quantidadeErro === 0 || quantidadeImportada > 0,
+      mensagem: mensagemSincronizacao,
       sincronizacao: {
         id: sincSync.id,
-        status: "Pendente",
-        pasta_criada: true,
+        status: quantidadeErro === 0 && quantidadeImportada > 0 ? "Concluída" : "Com erro",
+        quantidade_encontrada: quantidadeEncontrada,
+        quantidade_importada: quantidadeImportada,
+        quantidade_erro: quantidadeErro,
       },
     });
   } catch (error) {

@@ -245,3 +245,53 @@ async function findOrCreateFolder(folderName: string, parentId: string) {
   // Se não existe, criar nova
   return createDriveFolder(folderName, parentId);
 }
+
+export async function uploadNFSeXmlToDrive(
+  xmlContent: string,
+  fileName: string,
+  clienteNome: string,
+  clienteCNPJ: string,
+  origem: "Recebidas" | "Emitidas",
+  mes: string
+) {
+  const rootFolderId = process.env.GOOGLE_DRIVE_DOCUMENTOS_FISCAIS_FOLDER_ID;
+  if (!rootFolderId) throw new Error("GOOGLE_DRIVE_DOCUMENTOS_FISCAIS_FOLDER_ID nao configurado");
+
+  const clienteFolderName = `${clienteNome} (${clienteCNPJ})`;
+
+  // Encontrar pasta do cliente
+  const clienteFolder = await findOrCreateFolder(clienteFolderName, rootFolderId);
+
+  // Encontrar ou criar pasta NFSe
+  const nfseFolderName = "NFSe";
+  const nfseFolder = await findOrCreateFolder(nfseFolderName, clienteFolder.id);
+
+  // Encontrar ou criar pasta Recebidas/Emitidas
+  const originFolder = await findOrCreateFolder(origem, nfseFolder.id);
+
+  // Encontrar ou criar pasta do mês
+  const monthFolderName = getMonthFolderName(mes);
+  const monthFolder = await findOrCreateFolder(monthFolderName, originFolder.id);
+
+  // Upload do arquivo XML
+  const file = new File([xmlContent], fileName, { type: "application/xml" });
+  return uploadDriveFile(file, monthFolder.id);
+}
+
+function getMonthFolderName(mes: string): string {
+  const months: Record<string, string> = {
+    "01": "Janeiro",
+    "02": "Fevereiro",
+    "03": "Março",
+    "04": "Abril",
+    "05": "Maio",
+    "06": "Junho",
+    "07": "Julho",
+    "08": "Agosto",
+    "09": "Setembro",
+    "10": "Outubro",
+    "11": "Novembro",
+    "12": "Dezembro",
+  };
+  return months[mes] || `Mês ${mes}`;
+}
