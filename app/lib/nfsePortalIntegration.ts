@@ -17,7 +17,9 @@ export async function loginAndDownloadNFSes(
   certificatePath: string,
   certificatePassword: string,
   clienteCNPJ: string,
-  origem: "Emitidas" | "Recebidas" = "Emitidas"
+  origem: "Emitidas" | "Recebidas" = "Emitidas",
+  dataInicio?: string,
+  dataFim?: string
 ): Promise<{
   nfses: NFSeData[];
   error: string | null;
@@ -55,6 +57,8 @@ export async function loginAndDownloadNFSes(
     }
 
     const nfses: NFSeData[] = [];
+    const dateInicio = dataInicio ? new Date(dataInicio) : null;
+    const dateFim = dataFim ? new Date(dataFim) : null;
 
     // Iterar sobre cada nota encontrada
     for (let i = 0; i < nfsesFound; i++) {
@@ -90,6 +94,15 @@ export async function loginAndDownloadNFSes(
         const chaveAcesso = extractFromXml(xmlData, "chaveAcesso") || "";
         const serie = extractFromXml(xmlData, "serie") || "001";
         const mes = dataEmissao ? new Date(dataEmissao).toLocaleString("pt-BR", { month: "2-digit" }) : "00";
+
+        // Filtrar por período se especificado
+        if (dataEmissao && dateInicio && dateFim) {
+          const nfseDate = new Date(dataEmissao);
+          if (nfseDate < dateInicio || nfseDate > dateFim) {
+            console.log(`NFSe ${numero} fora do período especificado`);
+            continue;
+          }
+        }
 
         nfses.push({
           numero: numero?.trim() || "",

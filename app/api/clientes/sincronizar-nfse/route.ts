@@ -68,10 +68,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Permissao insuficiente para sincronizar NFS-es" }, { status: 403 });
   }
 
-  let { clienteId, certificadoId, tipo_documento } = await request.json();
+  let { clienteId, certificadoId, tipo_documento, data_inicio, data_fim } = await request.json();
 
   if (!clienteId || !certificadoId) {
     return NextResponse.json({ error: "clienteId e certificadoId sao obrigatorios" }, { status: 400 });
+  }
+
+  if (!data_inicio || !data_fim) {
+    return NextResponse.json({ error: "data_inicio e data_fim sao obrigatorios" }, { status: 400 });
   }
 
   tipo_documento = tipo_documento || "NFSe";
@@ -149,7 +153,9 @@ export async function POST(request: Request) {
         certificadoPath,
         senhaCertificado,
         cliente.identificacao,
-        "Emitidas"
+        "Emitidas",
+        data_inicio,
+        data_fim
       );
 
       if (erroEmitidas) {
@@ -161,7 +167,9 @@ export async function POST(request: Request) {
         certificadoPath,
         senhaCertificado,
         cliente.identificacao,
-        "Recebidas"
+        "Recebidas",
+        data_inicio,
+        data_fim
       );
 
       if (erroRecebidas) {

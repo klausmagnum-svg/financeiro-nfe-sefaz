@@ -26,6 +26,8 @@ export default function SyncNFSeModal({ isOpen, onCancel, onSyncComplete }: Sync
   const [certificados, setCertificados] = useState<Certificado[]>([]);
   const [selectedClienteId, setSelectedClienteId] = useState("");
   const [selectedCertificadoId, setSelectedCertificadoId] = useState("");
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataFim, setDataFim] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [feedback, setFeedback] = useState("");
@@ -119,6 +121,18 @@ export default function SyncNFSeModal({ isOpen, onCancel, onSyncComplete }: Sync
       return;
     }
 
+    if (!dataInicio || !dataFim) {
+      setFeedbackType("error");
+      setFeedback("Selecione data início e fim");
+      return;
+    }
+
+    if (new Date(dataInicio) > new Date(dataFim)) {
+      setFeedbackType("error");
+      setFeedback("Data início não pode ser depois da data fim");
+      return;
+    }
+
     setIsSyncing(true);
     setFeedback("");
 
@@ -140,6 +154,8 @@ export default function SyncNFSeModal({ isOpen, onCancel, onSyncComplete }: Sync
           clienteId: selectedClienteId,
           certificadoId: selectedCertificadoId,
           tipo_documento: "NFSe",
+          data_inicio: dataInicio,
+          data_fim: dataFim,
         }),
       });
 
@@ -215,6 +231,28 @@ export default function SyncNFSeModal({ isOpen, onCancel, onSyncComplete }: Sync
                       </option>
                     ))}
                   </select>
+                </label>
+
+                <label className="grid gap-1.5">
+                  <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">Data Início</span>
+                  <input
+                    type="date"
+                    className="min-h-10 rounded-lg border border-white/10 bg-slate-950/60 px-3 text-xs text-slate-100 outline-none disabled:opacity-60"
+                    value={dataInicio}
+                    onChange={(e) => setDataInicio(e.target.value)}
+                    disabled={isSyncing}
+                  />
+                </label>
+
+                <label className="grid gap-1.5">
+                  <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">Data Fim</span>
+                  <input
+                    type="date"
+                    className="min-h-10 rounded-lg border border-white/10 bg-slate-950/60 px-3 text-xs text-slate-100 outline-none disabled:opacity-60"
+                    value={dataFim}
+                    onChange={(e) => setDataFim(e.target.value)}
+                    disabled={isSyncing}
+                  />
                 </label>
               </>
             )}
