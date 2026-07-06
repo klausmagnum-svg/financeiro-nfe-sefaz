@@ -48,8 +48,11 @@ export async function loginAndDownloadNFSes(
     // Aguardar carregamento da página (pode ter login automático com certificado)
     await page.waitForTimeout(2000);
 
+    // Esperar carregamento da tabela
+    await page.waitForSelector('table.table-striped tbody tr', { timeout: 10000 });
+
     // Procurar por notas na página
-    const nfsesFound = await page.locator('[data-testid="nfse-row"]').count();
+    const nfsesFound = await page.locator('table.table-striped tbody tr').count();
 
     if (nfsesFound === 0) {
       console.log("Nenhuma NFSe encontrada no portal");
@@ -63,17 +66,17 @@ export async function loginAndDownloadNFSes(
     // Iterar sobre cada nota encontrada
     for (let i = 0; i < nfsesFound; i++) {
       try {
-        const row = page.locator('[data-testid="nfse-row"]').nth(i);
+        const row = page.locator('table.table-striped tbody tr').nth(i);
 
-        // Extrair informações da linha
-        const numero = await row.locator('[data-testid="numero"]').textContent();
-        const valor = await row.locator('[data-testid="valor"]').textContent();
-        const dataEmissao = await row.locator('[data-testid="data"]').textContent();
-        const emitente = await row.locator('[data-testid="emitente"]').textContent();
-        const tomador = await row.locator('[data-testid="tomador"]').textContent();
+        // Extrair informações da linha (usando os seletores corretos)
+        const dataHora = await row.locator('td.td-data-hora').textContent();
+        const cnpjEmitente = await row.locator('td.td-texto-grande').textContent();
+        const competencia = await row.locator('td.td-competencia').textContent();
+        const valor = await row.locator('td.td-valor').textContent();
+        const situacao = await row.locator('td.td-situacao').textContent();
 
-        // Procurar por link de download do XML
-        const downloadLink = await row.locator('[data-testid="download-xml"]').getAttribute("href");
+        // Procurar por link de download do XML (botão ou link dentro da linha)
+        const downloadLink = await row.locator('a[href*="download"], button[href*="download"]').getAttribute("href");
 
         if (!downloadLink) {
           console.log(`Nota ${numero} não tem link de download`);
@@ -85,19 +88,26 @@ export async function loginAndDownloadNFSes(
         const xmlContent = await xmlResponse?.text() || "";
 
         if (!xmlContent) {
-          console.log(`Não foi possível baixar XML da nota ${numero}`);
+          console.log(`Não foi possível baixar XML da nota ${cnpjEmitente}`);
           continue;
         }
 
         // Extrair dados do XML
         const xmlData = await parseStringPromise(xmlContent);
         const chaveAcesso = extractFromXml(xmlData, "chaveAcesso") || "";
+        const numero = extractFromXml(xmlData, "numero") || extractFromXml(xmlData, "nfseNumero") || "";
         const serie = extractFromXml(xmlData, "serie") || "001";
-        const mes = dataEmissao ? new Date(dataEmissao).toLocaleString("pt-BR", { month: "2-digit" }) : "00";
+
+        // Usar competência da tabela (MM/YYYY)
+        const [mesStr, ano] = (competencia?.trim() || "01/2026").split("/");
+        const mes = mesStr || "01";
+
+        // Converter data para formato ISO (usar primeira data da linha - data-hora)
+        const dataEmissaoStr = dataHora?.split(" ")[0] || `${ano}-${mes}-01`;
 
         // Filtrar por período se especificado
-        if (dataEmissao && dateInicio && dateFim) {
-          const nfseDate = new Date(dataEmissao);
+        if (dateInicio && dateFim) {
+          const nfseDate = new Date(dataEmissaoStr);
           if (nfseDate < dateInicio || nfseDate > dateFim) {
             console.log(`NFSe ${numero} fora do período especificado`);
             continue;
@@ -108,10 +118,10 @@ export async function loginAndDownloadNFSes(
           numero: numero?.trim() || "",
           serie,
           chave_acesso: chaveAcesso,
-          data_emissao: dataEmissao?.trim() || "",
-          valor: valor?.trim() || "",
-          emitente: emitente?.trim() || "",
-          tomador: tomador?.trim() || "",
+          data_emissao: dataEmissaoStr,
+          valor: valor?.trim()?.replace(/[^\d.,]/g, "") || "",
+          emitente: cnpjEmitente?.trim() || "",
+          tomador: "",
           xml: xmlContent,
           mes,
         });
