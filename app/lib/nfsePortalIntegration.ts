@@ -34,7 +34,7 @@ export async function loginAndDownloadNFSes(
       ],
     });
 
-    const context = await browser.createBrowserContext();
+    const context = await browser.newContext();
     const page = await context.newPage();
 
     // Acessar o portal nacional de NFSe
