@@ -79,7 +79,7 @@ export async function loginAndDownloadNFSes(
         const downloadLink = await row.locator('a[href*="download"], button[href*="download"]').getAttribute("href");
 
         if (!downloadLink) {
-          console.log(`Nota ${numero} não tem link de download`);
+          console.log(`Nota ${cnpjEmitente} não tem link de download`);
           continue;
         }
 
@@ -95,7 +95,7 @@ export async function loginAndDownloadNFSes(
         // Extrair dados do XML
         const xmlData = await parseStringPromise(xmlContent);
         const chaveAcesso = extractFromXml(xmlData, "chaveAcesso") || "";
-        const numero = extractFromXml(xmlData, "numero") || extractFromXml(xmlData, "nfseNumero") || "";
+        const numero = extractFromXml(xmlData, "numero") || extractFromXml(xmlData, "nfseNumero") || `nota-${i}`;
         const serie = extractFromXml(xmlData, "serie") || "001";
 
         // Usar competência da tabela (MM/YYYY)
