@@ -43,7 +43,7 @@ export default function FiscalModulePage({
                 key={action}
                 type="button"
                 onClick={() => {
-                  if (action === "Sincronizar NF-e" && onSyncClick) {
+                  if ((action === "Sincronizar NF-e" || action === "Sincronizar NFS-e") && onSyncClick) {
                     onSyncClick();
                   }
                 }}

@@ -191,18 +191,26 @@ export async function createClientDocumentFolderStructure(
   }
 
   const clienteFolderName = `${clienteNome} (${clienteCNPJCPF})`;
+  const now = new Date();
+  const syncFolderName = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}-${String(now.getMinutes()).padStart(2, "0")}-${String(now.getSeconds()).padStart(2, "0")}`;
   const documentTypes = ["NFe", "NFSe", "CTe", "MDFe", "NFCe"];
   const origins = ["Recebidas", "Emitidas"];
 
   const structure: Record<string, Record<string, string>> = {};
 
   try {
-    const clienteFolder = await createDriveFolder(clienteFolderName, rootFolderId);
+    // Criar ou reutilizar pasta do cliente
+    const clienteFolders = await findOrCreateFolder(clienteFolderName, rootFolderId);
+    const clienteFolder = clienteFolders;
     structure["cliente"] = { id: clienteFolder.id, name: clienteFolder.name };
+
+    // Criar subpasta com data/hora
+    const syncFolder = await createDriveFolder(syncFolderName, clienteFolder.id);
+    structure["sincronizacao"] = { id: syncFolder.id, name: syncFolder.name };
 
     for (const docType of documentTypes) {
       structure[docType] = {};
-      const typeFolder = await createDriveFolder(docType, clienteFolder.id);
+      const typeFolder = await createDriveFolder(docType, syncFolder.id);
 
       for (const origin of origins) {
         const originFolder = await createDriveFolder(origin, typeFolder.id);
@@ -215,4 +223,25 @@ export async function createClientDocumentFolderStructure(
     const message = error instanceof Error ? error.message : "Erro ao criar estrutura de pastas";
     return { success: false, structure: {}, error: message };
   }
+}
+
+async function findOrCreateFolder(folderName: string, parentId: string) {
+  const accessToken = await getAccessToken();
+
+  // Procurar pasta existente com mesmo nome
+  const searchResponse = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=name='${folderName}' and mimeType='application/vnd.google-apps.folder' and '${parentId}' in parents and trashed=false&fields=files(id,name)&supportsAllDrives=true`,
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }
+  );
+
+  const searchData = await searchResponse.json();
+
+  if (searchData.files && searchData.files.length > 0) {
+    return searchData.files[0];
+  }
+
+  // Se não existe, criar nova
+  return createDriveFolder(folderName, parentId);
 }

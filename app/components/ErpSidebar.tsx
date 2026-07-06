@@ -14,8 +14,8 @@ const modules = [
     icon: "tax",
     children: [
       { label: "Painel Fiscal", href: "/documentos-fiscais/painel" },
-      { label: "NF-e", href: "/documentos-fiscais/nfe" },
       { label: "NFS-e", href: "/documentos-fiscais/nfse" },
+      { label: "NF-e", href: "/documentos-fiscais/nfe" },
       { label: "NFC-e", href: "/documentos-fiscais/nfce" },
       { label: "CT-e", href: "/documentos-fiscais/cte" },
       { label: "Sincronizações", href: "/documentos-fiscais/sincronizacoes" },
